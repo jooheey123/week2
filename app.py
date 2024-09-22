@@ -5,6 +5,9 @@ from prompts import SYSTEM_PROMPT
 from dotenv import load_dotenv
 from langfuse.decorators import observe
 from langfuse.openai import openai
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core import Settings
 
  # Load environment variables
 load_dotenv()
@@ -46,6 +49,7 @@ gen_kwargs = {
 # Configuration setting to enable or disable the system prompt
 ENABLE_SYSTEM_PROMPT = True
 
+
 @observe()
 def get_latest_user_message(message_history):
     # Iterate through the message history in reverse to find the last user message
@@ -54,13 +58,29 @@ def get_latest_user_message(message_history):
             return message['content']
     return None
 
+
+
 @cl.on_message
 async def on_message(message: cl.Message):
-    
+    # Initialize the OpenAI embedding model
+    embedding_model = OpenAIEmbedding(model="text-embedding-ada-002")
+
+    # Load documents from a directory (you can change this path as needed)
+    documents = SimpleDirectoryReader("data").load_data()
+
+    # Create an index from the documents
+    index = VectorStoreIndex.from_documents(documents)
+
+    # Create a query engine
+    query_engine = index.as_query_engine()
+
+    # Example query
+    response = query_engine.query("What are the main things to learn?")
+    RESPONSE = str(response)
     message_history = cl.user_session.get("message_history", [])
 
     if ENABLE_SYSTEM_PROMPT and (not message_history or message_history[0].get("role") != "system"):
-        system_prompt_content = SYSTEM_PROMPT
+        system_prompt_content = SYSTEM_PROMPT + "\n" + RESPONSE
         message_history.insert(0, {"role": "system", "content": system_prompt_content})
 
     message_history.append({"role": "user", "content": message.content})
